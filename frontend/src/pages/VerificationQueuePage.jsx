@@ -217,9 +217,9 @@ export default function VerificationQueuePage() {
                   </td>
                 </tr>
               ) : (
-                filteredQueue.map((item) => (
+                filteredQueue.map((item, idx) => (
                   <tr
-                    key={item.queue_id || item.bidder_id}
+                    key={item.queue_id || `${item.bidder_id}-${item.tender_id || 'all'}-${idx}`}
                     onClick={() => handleExamine(item.bidder_id, item.tender_id)}
                     className="hover:bg-slate-50/80 cursor-pointer transition-colors"
                   >

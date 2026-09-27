@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     DATA_DIR: str = str(BASE_DIR / "data")
     DATASET_PATH: str = os.getenv(
         "DATASET_PATH",
-        r"C:\Users\arpit\.gemini\antigravity\brain\48017afc-d55c-44fe-9695-f72c483de02f\.user_uploaded\media_1790325666737.xlsx"
+        str(BASE_DIR / "data" / "complygem_full_dataset.csv.xlsx")
     )
 
     class Config:

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { api } from '../api/client';
+import { api, getApiBaseUrl, setApiBaseUrl } from '../api/client';
 import {
   Settings, Cpu, Database, RefreshCw, Key, Shield,
-  CheckCircle2, Sparkles, Building2, HardDrive
+  CheckCircle2, Sparkles, Building2, HardDrive, Globe,
+  AlertCircle, Check, ArrowRight
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -12,6 +13,14 @@ export default function SettingsPage() {
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [reseeding, setReseeding] = useState(false);
+
+  // Cloud API Gateway state
+  const [apiEndpoint, setApiEndpoint] = useState(() => {
+    const raw = getApiBaseUrl();
+    return raw.replace(/\/api\/?$/, '');
+  });
+  const [testingApi, setTestingApi] = useState(false);
+  const [testResult, setTestResult] = useState(null);
 
   useEffect(() => {
     if (systemStatus?.ai_engine) {
@@ -51,6 +60,63 @@ export default function SettingsPage() {
     }
   };
 
+  const handleTestApi = async () => {
+    setTestingApi(true);
+    setTestResult(null);
+    const target = apiEndpoint.trim().replace(/\/+$/, '');
+    const healthUrl = target ? `${target}/api/health` : '/api/health';
+    try {
+      const start = performance.now();
+      const res = await fetch(healthUrl);
+      const latency = Math.round(performance.now() - start);
+      const ct = res.headers.get('content-type') || '';
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      if (!ct.includes('application/json')) {
+        throw new Error(`Endpoint returned '${ct}', expected JSON. Verify backend URL.`);
+      }
+      const data = await res.json();
+      setTestResult({
+        success: true,
+        latency,
+        status: data.status || 'ONLINE',
+        bidders: data.data_availability?.bidders ?? 'Available',
+        tenders: data.data_availability?.tenders ?? 'Available',
+        database: data.database?.mode || 'Active'
+      });
+      showToast(`Connected to backend (${latency}ms)`, 'success');
+    } catch (err) {
+      setTestResult({
+        success: false,
+        error: err.message
+      });
+      showToast(`Connection failed: ${err.message}`, 'critical');
+    } finally {
+      setTestingApi(false);
+    }
+  };
+
+  const handleSaveApi = (e) => {
+    e.preventDefault();
+    const clean = apiEndpoint.trim().replace(/\/+$/, '');
+    setApiBaseUrl(clean);
+    showToast('Backend API Gateway saved. Reloading application state...', 'success');
+    setTimeout(() => {
+      window.location.reload();
+    }, 600);
+  };
+
+  const handleResetApi = () => {
+    setApiBaseUrl('');
+    setApiEndpoint('');
+    setTestResult(null);
+    showToast('Reset to default relative API (/api). Reloading...', 'info');
+    setTimeout(() => {
+      window.location.reload();
+    }, 600);
+  };
+
   return (
     <div className="p-8 space-y-6 max-w-4xl mx-auto">
       <div className="border-b border-slate-200 pb-5">
@@ -63,6 +129,84 @@ export default function SettingsPage() {
         <p className="text-xs text-slate-500 mt-1">
           Manage multimodal AI operational modes, inspect database storage connectors, and maintain benchmark datasets.
         </p>
+      </div>
+
+      {/* Production API Gateway & Cloud Deployment Coordinates */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 text-xs">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2 text-blue-900 font-bold uppercase tracking-wider text-xs">
+            <Globe className="w-5 h-5 text-blue-700" />
+            <span>Production API Gateway & Cloud Coordinates</span>
+          </div>
+          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200">
+            Active: {getApiBaseUrl()}
+          </span>
+        </div>
+
+        <p className="text-slate-600 text-[11.5px] leading-relaxed">
+          Configure the active FastAPI backend endpoint. When deployed across distributed cloud platforms (e.g. <strong>Vercel</strong> for Frontend and <strong>Render</strong> for Backend), enter your live Render backend URL below.
+        </p>
+
+        <form onSubmit={handleSaveApi} className="space-y-3 pt-1">
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            <input
+              type="text"
+              placeholder="e.g. https://your-backend.onrender.com (or leave empty for relative /api)"
+              value={apiEndpoint}
+              onChange={(e) => setApiEndpoint(e.target.value)}
+              className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono focus:outline-blue-600"
+            />
+            <button
+              type="button"
+              onClick={handleTestApi}
+              disabled={testingApi}
+              className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg font-semibold text-xs flex items-center justify-center space-x-1.5 transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${testingApi ? 'animate-spin' : ''}`} />
+              <span>{testingApi ? 'Probing...' : 'Test Connection'}</span>
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-semibold text-xs transition-colors shadow-xs"
+            >
+              Save & Apply
+            </button>
+            <button
+              type="button"
+              onClick={handleResetApi}
+              className="px-3 py-2 text-slate-500 hover:text-slate-700 text-xs font-medium"
+            >
+              Reset
+            </button>
+          </div>
+
+          {testResult && (
+            <div className={`p-3 rounded-xl border text-[11px] ${
+              testResult.success
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : 'bg-rose-50 border-rose-200 text-rose-900'
+            }`}>
+              {testResult.success ? (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      <strong>Backend Verified Healthy:</strong> Status: {testResult.status} • Bidders: {testResult.bidders} • Tenders: {testResult.tenders} • Storage: {testResult.database}
+                    </span>
+                  </div>
+                  <span className="font-mono text-[10px] text-emerald-700 font-bold">{testResult.latency}ms</span>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>
+                    <strong>Connection Failed:</strong> {testResult.error}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </form>
       </div>
 
       {/* AI Mode Card */}

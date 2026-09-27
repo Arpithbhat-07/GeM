@@ -1,8 +1,46 @@
-const RAW_API_URL = import.meta.env.VITE_API_URL || '';
-const API_BASE = RAW_API_URL ? `${RAW_API_URL.replace(/\/$/, '')}/api` : '/api';
+export function getApiBaseUrl() {
+  if (typeof window !== 'undefined') {
+    // 1. Query parameter override: ?api=https://backend.onrender.com
+    const params = new URLSearchParams(window.location.search);
+    const queryApi = params.get('api') || params.get('apiUrl') || params.get('backend');
+    if (queryApi) {
+      const clean = queryApi.trim().replace(/\/+$/, '');
+      localStorage.setItem('gem_api_url', clean);
+      return clean.endsWith('/api') ? clean : `${clean}/api`;
+    }
+
+    // 2. Persisted user configuration in localStorage
+    const stored = localStorage.getItem('gem_api_url');
+    if (stored) {
+      const clean = stored.trim().replace(/\/+$/, '');
+      return clean.endsWith('/api') ? clean : `${clean}/api`;
+    }
+  }
+
+  // 3. Build-time environment variable
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+    const clean = envUrl.trim().replace(/\/+$/, '');
+    return clean.endsWith('/api') ? clean : `${clean}/api`;
+  }
+
+  // 4. Default to relative /api for local Vite proxy and reverse proxies
+  return '/api';
+}
+
+export function setApiBaseUrl(newUrl) {
+  if (typeof window !== 'undefined') {
+    if (!newUrl) {
+      localStorage.removeItem('gem_api_url');
+    } else {
+      localStorage.setItem('gem_api_url', newUrl.trim().replace(/\/+$/, ''));
+    }
+  }
+}
 
 export async function fetchApi(endpoint, options = {}) {
-  const url = `${API_BASE}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const base = getApiBaseUrl();
+  const url = `${base}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   const headers = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
@@ -13,21 +51,35 @@ export async function fetchApi(endpoint, options = {}) {
     delete headers['Content-Type'];
   }
 
-  const token = localStorage.getItem('gem_auth_token');
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('gem_auth_token') : null;
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
   try {
     const res = await fetch(url, { ...options, headers });
+    const contentType = res.headers.get('content-type') || '';
+
     if (!res.ok) {
       let errorMsg = `HTTP Error ${res.status}`;
       try {
-        const errorJson = await res.json();
-        errorMsg = errorJson.detail || errorJson.message || errorMsg;
+        if (contentType.includes('application/json')) {
+          const errorJson = await res.json();
+          errorMsg = errorJson.detail || errorJson.message || errorMsg;
+        } else {
+          errorMsg = await res.text();
+        }
       } catch (_) {}
       throw new Error(errorMsg);
     }
+
+    // Safety guard: if server returns HTML (e.g. Vercel SPA index.html fallback for unmatched /api routes)
+    if (contentType.includes('text/html')) {
+      throw new Error(
+        `API gateway at '${url}' returned HTML instead of JSON. Ensure your deployed backend API URL is configured in Settings or VITE_API_URL.`
+      );
+    }
+
     return await res.json();
   } catch (err) {
     console.error(`API Error on ${url}:`, err);

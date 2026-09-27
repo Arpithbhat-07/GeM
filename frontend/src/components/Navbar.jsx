@@ -158,6 +158,19 @@ export default function Navbar() {
             </select>
           </div>
 
+          {/* API Gateway Status Badge */}
+          <div
+            onClick={() => setActiveView('settings')}
+            className="cursor-pointer hidden md:flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 hover:border-slate-600 text-xs transition-colors"
+            title="Click to configure API Gateway & Cloud Coordinates"
+          >
+            <span className={`w-2 h-2 rounded-full ${systemStatus ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+            <span className="text-slate-400 text-[11px]">API:</span>
+            <span className="font-semibold text-slate-200 text-[11px]">
+              {systemStatus ? 'ONLINE' : 'CONNECTING'}
+            </span>
+          </div>
+
           {/* AI Engine Status Badge */}
           <div
             onClick={() => setActiveView('settings')}
